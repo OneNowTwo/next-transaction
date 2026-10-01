@@ -1,0 +1,40 @@
+# Render Blueprint for Next Transaction
+# In Render: New → Blueprint → connect this repo (or upload this file).
+# Step-by-step for Michael: Project store docs/render-deploy.md
+
+databases:
+  - name: next-transaction-db
+    plan: free
+    databaseName: next_transaction
+    user: next_transaction
+
+services:
+  - type: web
+    name: next-transaction
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: bash scripts/start-production.sh
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: next-transaction-db
+          property: connectionString
+      - key: AUTH_EMAIL
+        sync: false
+      - key: AUTH_PASSWORD
+        sync: false
+      - key: AUTH_NAME
+        value: Pilot Agent
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini

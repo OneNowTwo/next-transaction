@@ -1,0 +1,19 @@
+# Optional production-style Postgres for hosted pilots.
+# Usage:
+#   docker compose up -d
+#   DATABASE_URL="postgresql://nt:nt@localhost:5432/next_transaction?schema=public" npx prisma migrate deploy
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nt
+      POSTGRES_PASSWORD: nt
+      POSTGRES_DB: next_transaction
+    ports:
+      - "5432:5432"
+    volumes:
+      - nt_pg_data:/var/lib/postgresql/data
+
+volumes:
+  nt_pg_data:

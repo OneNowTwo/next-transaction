@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  mode        String   // "demo" | "real" | "trial" | "live"
+  isFictional Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  properties    Property[]
+  evidence      Evidence[]
+  opportunities Opportunity[]
+  rules         Rule[]
+  notes         Note[]
+  feedback      Feedback[]
+  ingested      IngestedRecord[]
+  matchReviews  MatchReview[]
+}
+
+model Property {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  address              String
+  suburb               String
+  propertyType         String    @default("Industrial")
+  landAreaSqm          Float?
+  buildingAreaSqm      Float?
+  ownerEntity          String?
+  tenant               String?
+  lastSaleDate         DateTime?
+  leaseExpiry          DateTime?
+  leaseOptionInfo      String?
+  leaseVerifiedAt      DateTime?
+  assignedAgent        String?
+  relationshipNotes    String?
+  isFictional          Boolean   @default(false)
+  importKey            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  evidence      Evidence[]
+  opportunities Opportunity[]
+  notes         Note[]
+
+  @@unique([workspaceId, importKey])
+  @@index([workspaceId, suburb])
+  @@index([workspaceId, address])
+}
+
+model Evidence {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  propertyId         String
+  signalCategory     String
+  sourceTitle        String
+  sourceUrl          String?
+  excerpt            String
+  eventDate          DateTime?
+  collectedAt        DateTime  @default(now())
+  sourceType         String    // news, asic, planning, lease_record, agent_note, owner_conversation, other
+  verificationStatus String    @default("unverified") // verified, unverified, disputed, stale, resolved
+  eventKey           String?
+  isFictional        Boolean   @default(false)
+  isStale            Boolean   @default(false)
+  isResolved         Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  property  Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  opportunityEvidence OpportunityEvidence[]
+
+  @@index([workspaceId, propertyId])
+  @@index([workspaceId, eventKey])
+}
+
+model Rule {
+  id          String   @id @default(cuid())
+  workspaceId String
+  key         String
+  name        String
+  description String
+  opportunityType String // sale | leasing | either
+  enabled     Boolean  @default(true)
+  weight      Int      @default(30)
+  configJson  String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  firings   OpportunityRule[]
+
+  @@unique([workspaceId, key])
+}
+
+model Opportunity {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  propertyId        String
+  type              String    // sale | leasing
+  priority          String    // high | medium | low
+  status            String    @default("new") // new | saved | investigating | contacted | dismissed
+  whyNow            String
+  evidenceQuality   String    // strong | moderate | weak | conflicting | incomplete
+  missingInfo       String?
+  suggestedAction   String?
+  dismissReason     String?
+  reviewDate        DateTime?
+  newestEvidenceAt  DateTime?
+  score             Int       @default(0)
+  isFictional       Boolean   @default(false)
+  aiSummary         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  property  Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  rules     OpportunityRule[]
+  evidence  OpportunityEvidence[]
+  notes     Note[]
+  feedback  Feedback?
+
+  @@index([workspaceId, status, priority])
+  @@index([workspaceId, type])
+}
+
+model OpportunityRule {
+  id            String @id @default(cuid())
+  opportunityId String
+  ruleId        String
+  explanation   String
+  weightApplied Int
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  rule        Rule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, ruleId])
+}
+
+model OpportunityEvidence {
+  id            String @id @default(cuid())
+  opportunityId String
+  evidenceId    String
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  evidence    Evidence    @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, evidenceId])
+}
+
+model Note {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  propertyId    String?
+  opportunityId String?
+  body          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  property    Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+}
+
+model Feedback {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  opportunityId String   @unique
+  labels        String   // JSON array of labels
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, opportunityId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SourceConnector {
+  id                 String    @id @default(cuid())
+  key                String    @unique
+  name               String
+  sourceType         String    // planning | company_announcement
+  publisher          String
+  status             String    @default("idle") // idle | running | ok | error | disabled
+  lastSuccessAt      DateTime?
+  lastAttemptAt      DateTime?
+  lastError          String?
+  lastRetrievedCount Int       @default(0)
+  configJson         String    @default("{}")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  runs     IngestionRun[]
+  records  IngestedRecord[]
+}
+
+model IngestionRun {
+  id             String    @id @default(cuid())
+  connectorId    String
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  status         String    // running | success | error
+  retrievedCount Int       @default(0)
+  createdCount   Int       @default(0)
+  duplicateCount Int       @default(0)
+  errorMessage   String?
+  logJson        String    @default("[]")
+
+  connector SourceConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@index([connectorId, startedAt])
+}
+
+model IngestedRecord {
+  id            String    @id @default(cuid())
+  connectorId   String
+  workspaceId   String?
+  externalId    String
+  dedupeKey     String    @unique
+  sourceUrl     String
+  publisher     String
+  title         String
+  excerpt       String
+  eventDate     DateTime?
+  retrievedAt   DateTime  @default(now())
+  addressRaw    String?
+  suburb        String?
+  councilRef    String?
+  companySymbol String?
+  signalHint    String?
+  rawJson       String    @default("{}")
+  matchStatus   String    @default("unmatched") // matched | review | unmatched | skipped
+  propertyId    String?
+  evidenceId    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  connector SourceConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  workspace Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  reviews   MatchReview[]
+
+  @@index([connectorId, retrievedAt])
+  @@index([matchStatus])
+  @@index([suburb])
+}
+
+model MatchReview {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  ingestedRecordId String
+  reason           String
+  status           String   @default("pending") // pending | linked | dismissed
+  candidatePropertyId String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  record    IngestedRecord @relation(fields: [ingestedRecordId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+}
