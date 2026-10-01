@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/auth";
+import { runLiveIngestIfEmpty } from "@/lib/ingestion/bootstrap";
 import { runAllConnectors, runConnector } from "@/lib/ingestion/pipeline";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,12 @@ export async function GET(request: NextRequest) {
     request.headers.get("x-cron-secret");
   if (!verifyCronSecret(auth)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const mode = request.nextUrl.searchParams.get("mode");
+  if (mode === "if-empty") {
+    const result = await runLiveIngestIfEmpty();
+    return NextResponse.json({ ok: true, result, at: new Date().toISOString() });
   }
 
   const key = request.nextUrl.searchParams.get("connector");

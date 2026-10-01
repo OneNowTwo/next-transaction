@@ -126,10 +126,9 @@ export function AppShell({
       </header>
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
-          Pilot uses <strong>supplied evidence</strong> and{" "}
-          <strong>scheduled ingestion</strong> from configured sources. It does
-          not invent ownership, lease or tenant details. Temporary cloud previews
-          are not permanent hosting.
+          Live pilot collects public planning, major-project, ASX and media
+          records. It does not invent ownership, lease or tenant details. Demo
+          data stays in the demo workspace.
         </div>
         {workspaceMode === "live" ? (
           <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">

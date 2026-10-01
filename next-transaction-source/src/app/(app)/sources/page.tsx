@@ -1,10 +1,12 @@
 import { format } from "date-fns";
 import { prisma } from "@/lib/db";
+import { ensureConnectors } from "@/lib/ingestion/pipeline";
 import { runIngestionAction } from "@/lib/ingestion-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function SourcesPage() {
+  await ensureConnectors();
   const connectors = await prisma.sourceConnector.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -25,8 +27,8 @@ export default async function SourcesPage() {
             Source health
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Working integrations retrieve and store real records. Last successful
-            refresh and failures are shown here. Pending match reviews:{" "}
+            These sources retrieve public records into Live pilot. A run keeps going
+            after you click — refresh in a minute to see counts. Pending match reviews:{" "}
             <a href="/review" className="underline">
               {pendingReviews}
             </a>
@@ -34,7 +36,7 @@ export default async function SourcesPage() {
           </p>
         </div>
         <form action={runIngestionAction.bind(null, "all")}>
-          <Button type="submit">Run all ingestions now</Button>
+          <Button type="submit">Run sources</Button>
         </form>
       </div>
 

@@ -3,6 +3,7 @@ import { getActiveWorkspace } from "@/lib/workspace";
 import { OpportunityCard } from "@/components/opportunity-card";
 import { FilterBar } from "@/components/filter-bar";
 import { recalculateNow } from "@/lib/actions";
+import { runIngestionAction } from "@/lib/ingestion-actions";
 import { Button } from "@/components/ui/button";
 
 export default async function OpportunityFeedPage({
@@ -30,16 +31,29 @@ export default async function OpportunityFeedPage({
           }
         : {}),
     },
-    include: { property: true },
+    include: {
+      property: true,
+      evidence: { include: { evidence: true }, take: 3 },
+    },
     orderBy: [{ score: "desc" }, { newestEvidenceAt: "desc" }],
   });
 
-  const suburbs = await prisma.property.findMany({
+  const [suburbs, runningIngest, retrievedCount, reviewCount] = await Promise.all([
+    prisma.property.findMany({
     where: { workspaceId: workspace.id },
     select: { suburb: true },
     distinct: ["suburb"],
     orderBy: { suburb: "asc" },
-  });
+    }),
+    prisma.ingestionRun.count({
+      where: {
+        status: "running",
+        startedAt: { gt: new Date(Date.now() - 20 * 60 * 1000) },
+      },
+    }),
+    prisma.ingestedRecord.count({ where: { workspaceId: workspace.id } }),
+    prisma.matchReview.count({ where: { workspaceId: workspace.id, status: "pending" } }),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -73,14 +87,29 @@ export default async function OpportunityFeedPage({
 
       {opportunities.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-card/60 px-6 py-16 text-center">
-          <p className="text-base font-medium">No opportunities yet</p>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="text-base font-medium">
+            {workspace.mode === "live" && runningIngest > 0
+              ? "Collecting public records"
+              : "No opportunities yet"}
+          </p>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
             {workspace.mode === "live"
-              ? "No live research leads yet. Open Sources and run ingestion — the live feed is never padded with fiction."
+              ? runningIngest > 0
+                ? "Sources are running now (Planning Alerts, NSW major projects, ASX announcements, and industrial media). Refresh this page in a minute. The feed only shows records those sources actually returned."
+                : "Live pilot starts empty until public sources are collected. Nothing fictional is added here. Run sources, then refresh. Retrieved records in this workspace: " +
+                  retrievedCount +
+                  ". Waiting in review: " +
+                  reviewCount +
+                  "."
               : workspace.mode === "real"
                 ? "Import a property CSV and add evidence to generate ranked leads."
-                : "Run the seed script, switch workspace, or recalculate after adding evidence."}
+                : "Demo and trial stay separate from Live. Seed the demo with npm run db:seed if you want sample records. Live is real sources only."}
           </p>
+          {workspace.mode === "live" ? (
+            <form action={runIngestionAction.bind(null, "all")} className="mt-4">
+              <Button type="submit">Run sources</Button>
+            </form>
+          ) : null}
         </div>
       ) : (
         <div className="grid gap-3">

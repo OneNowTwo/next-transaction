@@ -94,10 +94,24 @@ For a short pilot: Free web + Free Postgres is enough. Set a calendar reminder b
 - Login gate when `AUTH_*` set
 - Demo / trial / my / live workspaces
 - CSV import, rules, feedback, export
-- Live connectors: Planning Alerts (Western Sydney) + ASX Markit feed
-- Match review queue for uncertain ASX items
+- Live connectors: Planning Alerts (11 Western Sydney LGAs), NSW major projects, ASX announcements (including industrial landlords), Western Sydney industrial media RSS
+- Match review queue for company announcements and headlines without a street address
 - Production migrate-on-start for Render
+
+## If the site is already on Render
+
+The GitHub repo keeps the app in the folder `next-transaction-source/`. Render’s root directory should be that folder (the live service already starts).
+
+1. Replace the files inside `next-transaction-source/` with this build and push to `main`.
+2. Render → the `next-transaction` web service → **Manual Deploy** → **Deploy latest commit**.
+3. Open https://next-transaction.onrender.com and sign in.
+4. You land on **Live pilot**. If the database has no leads yet, the server collects public sources after boot, and the first signed-in page starts the same collect. If the feed is still empty, click **Run sources** and refresh after about a minute.
+5. Leave `npm run db:seed` alone on production unless you also want the fictional demo. Live is never filled with that seed.
+
+## Sources in this build
+
+Planning Alerts (11 Western Sydney LGAs), NSW Planning Portal major projects (warehouse / data storage), ASX announcements (market feed plus industrial landlords), and a Western Sydney industrial news RSS. Uncertain company or media items go to **Review**. Owner, tenant and lease are not invented.
 
 ## Single next action
 
-**In Render: New → Blueprint → select your `next-transaction` repo → set `AUTH_EMAIL` + `AUTH_PASSWORD` → create.**
+**Push this build to the GitHub repo Render is already using, then Manual Deploy the `next-transaction` service.** After it is live, sign in and refresh the Live feed.
