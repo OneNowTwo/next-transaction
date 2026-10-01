@@ -118,11 +118,40 @@ export default async function OpportunityDetailPage({
                 Inferred research lead — not a verified fact or transaction certainty
               </p>
               <p>{opportunity.whyNow}</p>
-              <p className="mt-2 text-xs text-sky-900/80">
-                Reported events live in the evidence timeline below. This card
-                interprets those events; it does not invent ownership, lease
-                terms, or market exclusivity.
-              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-3 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-950">
+                  Verified from the source
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {timeline.filter((item) => item.verificationStatus === "verified").length === 0 ? (
+                    <li className="text-muted-foreground">No verified source excerpt is linked.</li>
+                  ) : (
+                    timeline
+                      .filter((item) => item.verificationStatus === "verified")
+                      .map((item) => (
+                        <li key={item.id}>
+                          <p className="font-medium">{item.sourceTitle}</p>
+                          <p className="mt-1 text-emerald-950/90">{item.excerpt}</p>
+                        </li>
+                      ))
+                  )}
+                </ul>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-950">
+                  Inferred / still unknown
+                </p>
+                <p className="mt-2 text-amber-950/90">
+                  The ranking interprets the records above. It does not add an owner,
+                  tenant, lease expiry, or a decision to sell or lease.
+                </p>
+                <p className="mt-2 font-medium">Check next</p>
+                <p className="mt-1">
+                  {opportunity.suggestedAction ?? "Open each source and confirm the address."}
+                </p>
+              </div>
             </div>
             <div>
               <h3 className="text-sm font-semibold">Rules that fired</h3>
@@ -248,7 +277,7 @@ export default async function OpportunityDetailPage({
                   <p className="mt-2 text-sm">{item.excerpt}</p>
                   {item.sourceUrl ? (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Reference URL (not auto-fetched):{" "}
+                      Source:{" "}
                       <a
                         href={item.sourceUrl}
                         className="underline"

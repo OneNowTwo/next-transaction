@@ -353,34 +353,52 @@ export function generateOpportunitiesForProperty(
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
     const support = typeHits.map((h) => h.explanation).join(" ");
+    const verifiedBits = linkedEvidence.slice(0, 3).map((e) => {
+      const when = e.eventDate ? e.eventDate.toISOString().slice(0, 10) : "date not published";
+      const state =
+        e.verificationStatus === "verified" ? "retrieved from the publisher" : e.verificationStatus;
+      return `${e.sourceTitle} (${when}; ${state})`;
+    });
+    const verifiedLine = verifiedBits.length
+      ? `Verified: ${verifiedBits.join(" · ")}.`
+      : "Verified: no source record is linked yet.";
+    const inferredLine =
+      "Inferred: this card is a research ranking only. Owner, tenant, lease and any intention to sell or lease stay Unknown unless those facts are written in a source excerpt.";
     const missingLine =
-      missing.length > 0
-        ? ` Still unknown / to verify: ${missing.slice(0, 3).join("; ")}.`
-        : "";
+      missing.length > 0 ? ` Still to verify: ${missing.slice(0, 3).join("; ")}.` : "";
 
-    let whyNow: string;
+    let whatChanged: string;
+    let whyItMatters: string;
     let suggestedAction: string;
     if (listingLeased) {
-      whyNow = `What changed: a public listing reports this property as leased. Why it matters: useful market context only — this is not an open lead and was not discovered before the market. What supports it: ${support}.${missingLine}`;
+      whatChanged = "a public listing reports this property as leased";
+      whyItMatters = "this is market context, not an open vacancy";
       suggestedAction =
-        "Do not approach as a live vacancy. If useful, file as comps/context and confirm any ongoing agency instructions separately.";
+        "Do not approach as a live vacancy. File it as context and confirm any agency instruction separately.";
     } else if (listingOnly) {
-      whyNow = `What changed: this property is already publicly advertised. Why it matters: use the record to practise research workflow — it is not a pre-market discovery. What supports it: ${support}.${missingLine}`;
+      whatChanged = "this property is already publicly advertised";
+      whyItMatters = "it is on the market already, not a pre-market discovery";
       suggestedAction =
-        "Review the public listing details, note competing agents if shown, and only pursue if you have a genuine tenant/buyer brief — do not claim exclusive discovery.";
+        "Read the listing, note the agent if one is named, and only pursue it for a real brief.";
     } else if (planningOnly) {
-      whyNow = `What changed: a dated planning notice was published for this address. Why it matters: planning can affect timing, but alone it is not proof of a sale or leasing instruction. What supports it: ${support}.${missingLine}`;
+      whatChanged = "a planning notice or major-project page was retrieved for this place";
+      whyItMatters =
+        "planning can change timing, but it is not proof that anyone wants to sell or lease";
       suggestedAction =
-        "Confirm current DA/CDC status with council records, identify the applicant/owner if public, and decide whether any agency angle exists — do not invent ownership or tenant intentions.";
+        "Open the source link, confirm the address and status, and see whether an applicant or owner is actually named. Do not guess the tenant.";
     } else if (type === "leasing") {
-      whyNow = `What changed: ${support} Why it matters: this may create a leasing research lead for this facility (inferred — not a verified vacancy). What supports it: the linked evidence and rules below.${missingLine}`;
+      whatChanged = support;
+      whyItMatters = "this may be a leasing research lead, not a confirmed vacancy";
       suggestedAction =
-        "Confirm whether this facility is affected, whether an option has been exercised, and who the decision-makers are before contacting anyone.";
+        "Confirm the facility, any option, and who decides, before contacting anyone.";
     } else {
-      whyNow = `What changed: ${support} Why it matters: this is a sale research ranking only — not a probability that the owner will sell. What supports it: the linked evidence and rules below.${missingLine}`;
+      whatChanged = support;
+      whyItMatters = "this is a sale research ranking, not a prediction that the owner will sell";
       suggestedAction =
-        "Verify ownership and any sale intention with primary sources; check for existing listing instructions before approaching.";
+        "Check ownership and any existing listing instruction in a primary source before approaching.";
     }
+
+    const whyNow = `What changed: ${whatChanged}. Why look now: ${whyItMatters}. What supports it: ${support} ${verifiedLine} ${inferredLine}${missingLine} Check next: ${suggestedAction}`;
 
     results.push({
       propertyId: property.id,

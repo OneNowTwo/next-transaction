@@ -1,9 +1,11 @@
 import * as cheerio from "cheerio";
 import {
   INDUSTRIAL_KEYWORDS,
-  isWesternSydneySuburb,
+  NON_INDUSTRIAL,
+  findWesternSydneySuburb,
   parseAustralianAddress,
 } from "@/lib/geo";
+import { fetchText, mapPool } from "@/lib/ingestion/http";
 
 export type PlanningAlertItem = {
   externalId: string;
@@ -19,17 +21,20 @@ export type PlanningAlertItem = {
   raw: Record<string, unknown>;
 };
 
-const UA = "NextTransactionPilot/1.0 (+local research; planningalerts public HTML)";
-const AUTHORITIES = ["blacktown", "penrith", "fairfield", "liverpool", "campbelltown"];
-
-async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "text/html" },
-    next: { revalidate: 0 },
-  });
-  if (!res.ok) throw new Error(`Planning Alerts HTTP ${res.status} for ${url}`);
-  return res.text();
-}
+/** Planning Alerts authority slugs verified to return HTML (Oct 2026). */
+export const PLANNING_AUTHORITIES = [
+  "blacktown",
+  "penrith",
+  "liverpool",
+  "fairfield",
+  "campbelltown",
+  "cumberland",
+  "parramatta",
+  "camden",
+  "hawkesbury",
+  "the_hills",
+  "bankstown",
+] as const;
 
 function parseListPage(html: string): Array<{ id: string; snippet: string }> {
   const $ = cheerio.load(html);
@@ -51,7 +56,7 @@ function parseListPage(html: string): Array<{ id: string; snippet: string }> {
   });
 }
 
-function parseDetail(html: string, id: string): PlanningAlertItem | null {
+function parseDetail(html: string, id: string, snippet: string): PlanningAlertItem | null {
   const $ = cheerio.load(html);
   const addressRaw = $("h1").first().text().replace(/\s+/g, " ").trim();
   if (!addressRaw) return null;
@@ -62,7 +67,10 @@ function parseDetail(html: string, id: string): PlanningAlertItem | null {
       if ($(el).text().trim().toLowerCase() === label.toLowerCase()) {
         const raw = $(el).next("dd").text().replace(/\s+/g, " ").trim();
         // Planning Alerts appends help text after the reference value.
-        const cleaned = raw.replace(/\s+Info\b.*/i, "").trim();
+        const cleaned = raw
+          .replace(/\s+Info\b.*/i, "")
+          .replace(/\s+View source\b.*/i, "")
+          .trim();
         value = cleaned || raw || null;
       }
     });
@@ -91,16 +99,16 @@ function parseDetail(html: string, id: string): PlanningAlertItem | null {
   }
 
   const parsed = parseAustralianAddress(addressRaw);
-  const suburb = parsed.suburb;
-  const blob = `${addressRaw} ${description}`;
-  const industrial = INDUSTRIAL_KEYWORDS.test(blob);
-  const inWs = isWesternSydneySuburb(suburb) || /\bNSW\b/i.test(addressRaw);
-
-  // Keep Western Sydney industrial-ish OR industrial keywords in WS LGA pages we already scoped
-  if (!inWs && !industrial) return null;
-  if (!industrial && suburb && !isWesternSydneySuburb(suburb)) return null;
-  // Prefer industrial keywords; still allow WS industrial precinct suburbs with commercial/office fitout etc. only if industrial keyword present
-  if (!industrial) return null;
+  const suburb = parsed.suburb || findWesternSydneySuburb(addressRaw);
+  const blob = `${addressRaw} ${description} ${snippet}`;
+  // Authority pages are already Western Sydney LGAs. Keep industrial wording only.
+  if (!INDUSTRIAL_KEYWORDS.test(blob)) return null;
+  // A house with a hardstand driveway is not an industrial lead.
+  const clearlyIndustrial =
+    /\b(warehouses?|industrial|factories|factory|logistics|distribution\s*cent|data\s*cent|cold\s*stor|manufactur)\b/i.test(
+      blob
+    );
+  if (NON_INDUSTRIAL.test(blob) && !clearlyIndustrial) return null;
 
   const excerpt = [
     description || "No description provided on Planning Alerts.",
@@ -136,65 +144,57 @@ export async function fetchPlanningAlerts(options?: {
   maxPagesPerAuthority?: number;
   maxDetails?: number;
 }): Promise<{ items: PlanningAlertItem[]; log: string[] }> {
-  const maxPages = options?.maxPagesPerAuthority ?? 2;
-  const maxDetails = options?.maxDetails ?? 40;
+  const maxPages = options?.maxPagesPerAuthority ?? 3;
+  const maxDetails = options?.maxDetails ?? 48;
   const log: string[] = [];
   const candidates: Array<{ id: string; snippet: string; authority: string }> = [];
 
-  for (const authority of AUTHORITIES) {
+  const pages: Array<{ authority: string; page: number; url: string }> = [];
+  for (const authority of PLANNING_AUTHORITIES) {
     for (let page = 1; page <= maxPages; page += 1) {
       const url =
         page === 1
           ? `https://www.planningalerts.org.au/authorities/${authority}/applications`
           : `https://www.planningalerts.org.au/authorities/${authority}/applications?page=${page}`;
-      try {
-        const html = await fetchText(url);
-        const list = parseListPage(html);
-        log.push(`${authority} page ${page}: ${list.length} listings`);
-        for (const item of list) {
-          const parsed = parseAustralianAddress(item.snippet.split("  ")[0] || item.snippet);
-          // Heuristic from snippet: industrial keywords OR known WS industrial suburb in text
-          const interesting =
-            INDUSTRIAL_KEYWORDS.test(item.snippet) ||
-            /\b(Eastern Creek|Erskine Park|Wetherill Park|Horsley Park|Huntingwood|Minchinbury|Arndell Park|Prestons|Kemps Creek)\b/i.test(
-              item.snippet
-            );
-          if (interesting) {
-            candidates.push({ ...item, authority });
-          } else if (parsed.suburb && isWesternSydneySuburb(parsed.suburb) && INDUSTRIAL_KEYWORDS.test(item.snippet)) {
-            candidates.push({ ...item, authority });
-          }
-        }
-      } catch (err) {
-        log.push(
-          `${authority} page ${page} error: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
+      pages.push({ authority, page, url });
     }
   }
 
-  // Always include unique candidate ids; cap detail fetches
+  await mapPool(pages, 3, async ({ authority, page, url }) => {
+    try {
+      const html = await fetchText(url);
+      const list = parseListPage(html);
+      log.push(`${authority} page ${page}: ${list.length} listings`);
+      for (const item of list) {
+        if (INDUSTRIAL_KEYWORDS.test(item.snippet)) {
+          candidates.push({ ...item, authority });
+        }
+      }
+    } catch (err) {
+      log.push(
+        `${authority} page ${page} error: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  });
+
   const unique = Array.from(new Map(candidates.map((c) => [c.id, c])).values()).slice(
     0,
     maxDetails
   );
-  log.push(`Detail fetch candidates: ${unique.length}`);
+  log.push(`Detail fetch candidates: ${unique.length} (cap ${maxDetails})`);
 
-  const items: PlanningAlertItem[] = [];
-  for (const c of unique) {
+  const parsedItems = await mapPool(unique, 2, async (c) => {
     try {
-      // Be polite to Planning Alerts — avoid burst 429s.
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 180));
       const html = await fetchText(`https://www.planningalerts.org.au/applications/${c.id}`);
-      const parsed = parseDetail(html, c.id);
-      if (parsed) items.push(parsed);
+      return parseDetail(html, c.id, c.snippet);
     } catch (err) {
-      log.push(
-        `detail ${c.id} error: ${err instanceof Error ? err.message : String(err)}`
-      );
+      log.push(`detail ${c.id} error: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
     }
-  }
+  });
 
+  const items = parsedItems.filter((item): item is PlanningAlertItem => item !== null);
   log.push(`Stored-eligible planning records: ${items.length}`);
   return { items, log };
 }

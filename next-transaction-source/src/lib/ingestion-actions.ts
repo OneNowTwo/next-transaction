@@ -1,17 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { runAllConnectors, runConnector } from "@/lib/ingestion/pipeline";
+import { ensureConnectors } from "@/lib/ingestion/pipeline";
+import { scheduleIngest } from "@/lib/ingestion/bootstrap";
 import { prisma } from "@/lib/db";
 import { getActiveWorkspace } from "@/lib/workspace";
 import { recalculateWorkspaceOpportunities } from "@/lib/rules";
 
 export async function runIngestionAction(key: string) {
-  if (key === "all") {
-    await runAllConnectors();
-  } else {
-    await runConnector(key);
-  }
+  await ensureConnectors();
+  // Runs in the server process after the click so a slow collect does not
+  // depend on the browser staying on the request.
+  scheduleIngest(key);
   revalidatePath("/sources");
   revalidatePath("/review");
   revalidatePath("/");

@@ -62,13 +62,22 @@ export async function ensureWorkspaces() {
 }
 
 export async function getActiveWorkspace() {
-  const { demo } = await ensureWorkspaces();
+  const { demo, live } = await ensureWorkspaces();
   const jar = await cookies();
   const id = jar.get(WORKSPACE_COOKIE)?.value;
   if (id) {
     const found = await prisma.workspace.findUnique({ where: { id } });
-    if (found) return found;
+    if (found) {
+      // An unseeded demo/trial looks blank on a fresh host. Land on Live instead.
+      if (found.mode === "demo" || found.mode === "trial") {
+        const count = await prisma.property.count({ where: { workspaceId: found.id } });
+        if (count === 0) return live;
+      }
+      return found;
+    }
   }
+  const demoCount = await prisma.property.count({ where: { workspaceId: demo.id } });
+  if (demoCount === 0) return live;
   return demo;
 }
 

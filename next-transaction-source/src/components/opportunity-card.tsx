@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import type { Opportunity, Property } from "@prisma/client";
+import type { Evidence, Opportunity, Property } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PriorityBadge,
@@ -10,7 +10,10 @@ import {
   FictionalBadge,
 } from "@/components/badges";
 
-type Opp = Opportunity & { property: Property };
+type Opp = Opportunity & {
+  property: Property;
+  evidence?: Array<{ evidence: Evidence }>;
+};
 
 export function OpportunityCard({ opportunity }: { opportunity: Opp }) {
   return (
@@ -37,6 +40,29 @@ export function OpportunityCard({ opportunity }: { opportunity: Opp }) {
           <p className="text-sm leading-relaxed text-foreground/90">
             {opportunity.whyNow}
           </p>
+          {opportunity.suggestedAction ? (
+            <p className="text-sm text-foreground/80">
+              <span className="font-medium">Check next: </span>
+              {opportunity.suggestedAction}
+            </p>
+          ) : null}
+          {opportunity.evidence && opportunity.evidence.length > 0 ? (
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {opportunity.evidence.slice(0, 2).map((link) => (
+                <li key={link.evidence.id}>
+                  <span className="font-medium text-foreground/80">
+                    {link.evidence.verificationStatus === "verified" ? "Verified" : "Unverified"}
+                    :{" "}
+                  </span>
+                  {link.evidence.sourceTitle}
+                  {link.evidence.eventDate
+                    ? ` · ${format(link.evidence.eventDate, "dd MMM yyyy")}`
+                    : ""}
+                  {link.evidence.sourceUrl ? " · source linked on the detail page" : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <QualityBadge value={opportunity.evidenceQuality} />
             <span>
